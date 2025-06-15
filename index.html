@@ -1,9 +1,8 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Location-Based Attendance</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -11,6 +10,10 @@
   <div class="container">
     <h1>Student Attendance</h1>
     <input type="text" id="rollNo" placeholder="Enter Roll Number" />
+    <div class="location-display">
+      <button id="getLocationBtn">Get Location</button>
+      <span id="locationInfo">Lat: -, Lng: -</span>
+    </div>
     <p id="status">Checking location...</p>
     <button id="markBtn" disabled>Mark Attendance</button>
   </div>
