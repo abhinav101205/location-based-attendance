@@ -1,13 +1,12 @@
 import streamlit as st
 import sqlite3
-import datetime
 import math
 import streamlit.components.v1 as components
 
 # Constants
 COLLEGE_LAT = 17.4931
 COLLEGE_LNG = 78.3915
-ALLOWED_RADIUS = 1000  # meters
+ALLOWED_RADIUS = 1000  # in meters
 
 # DB Setup
 conn = sqlite3.connect("attendance.db", check_same_thread=False)
@@ -23,7 +22,7 @@ c.execute("""
 """)
 conn.commit()
 
-# Haversine distance function
+# Distance function
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     dLat = math.radians(lat2 - lat1)
@@ -32,54 +31,18 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.asin(math.sqrt(a))
     return R * c
 
+# Title
 st.title("📍 Location-Based Student Attendance")
-
-roll_no = st.text_input("Enter your Roll Number")
-
-# Display JavaScript to get location
-st.markdown("Click the button below to fetch your location from your device.")
-get_location_button = st.button("📍 Get My Location")
-
-# Run JS to get location
-components.html("""
-    <script>
-    const sendCoords = (lat, lng) => {
-        const input = window.parent.document.querySelector('iframe[srcdoc]').contentWindow;
-        input.postMessage({lat, lng}, "*");
-    };
-
-    navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            sendCoords(lat, lng);
-        },
-        (err) => {
-            alert("Location access denied.");
-        }
-    );
-    </script>
-""", height=0)
 
 # Initialize session state
 if "lat" not in st.session_state:
     st.session_state.lat = None
     st.session_state.lng = None
+    st.session_state.location_checked = False
+    st.session_state.within_range = False
 
-# Get query parameters using updated API
-lat = st.query_params.get("lat", None)
-lng = st.query_params.get("lng", None)
-
-# Store lat/lng in session state if available
-if lat and lng:
-    try:
-        st.session_state.lat = float(lat)
-        st.session_state.lng = float(lng)
-    except ValueError:
-        pass
-
-# Trigger JS to update query params
-if get_location_button:
+# Location Button
+if st.button("📍 Get My Location"):
     components.html(
         f"""
         <script>
@@ -101,20 +64,37 @@ if get_location_button:
         height=0,
     )
 
-# Display location and handle attendance marking
-if st.session_state.lat and st.session_state.lng:
-    st.success(f"📌 Location: Lat: {st.session_state.lat:.5f}, Lng: {st.session_state.lng:.5f}")
-    distance = haversine(st.session_state.lat, st.session_state.lng, COLLEGE_LAT, COLLEGE_LNG)
-    if distance <= ALLOWED_RADIUS:
-        if st.button("✅ Mark Attendance"):
-            if not roll_no:
-                st.warning("Please enter your Roll Number.")
-            else:
-                c.execute("INSERT INTO attendance (roll_no, latitude, longitude) VALUES (?, ?, ?)",
-                          (roll_no, st.session_state.lat, st.session_state.lng))
-                conn.commit()
-                st.success("🎉 Attendance marked successfully.")
-    else:
-        st.error("❌ You are outside the allowed 1 km radius of the college.")
-else:
-    st.info("Your location has not been captured yet.")
+# Get location from query params
+lat = st.query_params.get("lat", None)
+lng = st.query_params.get("lng", None)
+
+if lat and lng:
+    try:
+        st.session_state.lat = float(lat)
+        st.session_state.lng = float(lng)
+        st.session_state.location_checked = True
+
+        distance = haversine(st.session_state.lat, st.session_state.lng, COLLEGE_LAT, COLLEGE_LNG)
+
+        if distance <= ALLOWED_RADIUS:
+            st.session_state.within_range = True
+            st.success(f"✅ You are within the allowed area.\n📌 Lat: {st.session_state.lat:.5f}, Lng: {st.session_state.lng:.5f}")
+        else:
+            st.session_state.within_range = False
+            st.error("❌ You are outside the 1 km radius of the college.")
+            st.stop()
+
+    except ValueError:
+        st.error("Invalid latitude or longitude data.")
+
+# Show roll input & mark attendance only if in range
+if st.session_state.within_range:
+    roll_no = st.text_input("🎓 Enter your Roll Number")
+    if st.button("✅ Mark Attendance"):
+        if not roll_no.strip():
+            st.warning("⚠️ Please enter your Roll Number.")
+        else:
+            c.execute("INSERT INTO attendance (roll_no, latitude, longitude) VALUES (?, ?, ?)",
+                      (roll_no.strip(), st.session_state.lat, st.session_state.lng))
+            conn.commit()
+            st.success("🎉 Attendance marked successfully.")
