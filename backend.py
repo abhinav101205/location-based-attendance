@@ -1,13 +1,10 @@
-# backend.py (Flask)
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from math import radians, cos, sin, asin, sqrt
+# streamlit_attendance.py
+import streamlit as st
 import sqlite3
-import datetime
+from datetime import datetime
+from math import radians, cos, sin, asin, sqrt
 
-app = Flask(__name__)
-CORS(app)
-
+# Constants
 college_lat = 17.4931
 college_lng = 78.3915
 allowed_radius = 1000  # in meters
@@ -20,32 +17,59 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * asin(sqrt(a))
     return R * c
 
-@app.route("/mark-attendance", methods=["POST"])
-def mark_attendance():
-    data = request.get_json()
-    lat = data.get("lat")
-    lng = data.get("lng")
-    roll_no = data.get("roll_no")
-    distance = haversine(lat, lng, college_lat, college_lng)
+def mark_attendance(roll_no, lat, lng):
+    conn = sqlite3.connect("attendance.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            roll_no TEXT,
+            latitude REAL,
+            longitude REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("INSERT INTO attendance (roll_no, latitude, longitude) VALUES (?, ?, ?)", (roll_no, lat, lng))
+    conn.commit()
+    conn.close()
 
-    if distance <= allowed_radius:
-        conn = sqlite3.connect("attendance.db")
-        c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS attendance (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                roll_no TEXT,
-                latitude REAL,
-                longitude REAL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        c.execute("INSERT INTO attendance (roll_no, latitude, longitude) VALUES (?, ?, ?)", (roll_no, lat, lng))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Attendance marked successfully."})
+# Streamlit UI
+st.set_page_config(page_title="Location Attendance", layout="centered")
+st.title("📍 Location-Based Attendance")
+
+roll_no = st.text_input("Enter Roll Number")
+
+with st.expander("📍 Get Your Current Location"):
+    st.markdown("Use your phone or browser to get your current latitude and longitude.")
+    lat = st.number_input("Latitude", format="%.6f")
+    lng = st.number_input("Longitude", format="%.6f")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"📌 College Lat: `{college_lat}`")
+    with col2:
+        st.write(f"📌 College Lng: `{college_lng}`")
+
+if st.button("Mark Attendance"):
+    if not roll_no or lat == 0.0 or lng == 0.0:
+        st.warning("Please fill in all fields.")
     else:
-        return jsonify({"message": "You are not in the allowed location."})
+        distance = haversine(lat, lng, college_lat, college_lng)
+        if distance <= allowed_radius:
+            mark_attendance(roll_no, lat, lng)
+            st.success(f"✅ Attendance marked successfully at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            st.error("❌ You are not within the allowed location radius.")
 
-if __name__ == "__main__":
-    app.run(debug=True)
+# Optional: Show last few entries
+with st.expander("🗂 View Attendance Log"):
+    conn = sqlite3.connect("attendance.db")
+    df = None
+    try:
+        df = conn.execute("SELECT roll_no, latitude, longitude, timestamp FROM attendance ORDER BY id DESC LIMIT 10").fetchall()
+        if df:
+            st.table(df)
+        else:
+            st.info("No attendance records found.")
+    except:
+        st.warning("Database not initialized yet.")
+    conn.close()
