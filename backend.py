@@ -41,7 +41,7 @@ st.markdown("Click the button below to fetch your location from your device.")
 get_location_button = st.button("📍 Get My Location")
 
 # Run JS to get location
-location = components.html("""
+components.html("""
     <script>
     const sendCoords = (lat, lng) => {
         const input = window.parent.document.querySelector('iframe[srcdoc]').contentWindow;
@@ -61,20 +61,24 @@ location = components.html("""
     </script>
 """, height=0)
 
-# Get location from JS
-location_data = st.experimental_get_query_params()
-
+# Initialize session state
 if "lat" not in st.session_state:
     st.session_state.lat = None
     st.session_state.lng = None
 
-def handle_js_response():
-    import streamlit_javascript as stj  # optional: if you use streamlit-javascript package
-    coords = stj.get_geolocation()
-    if coords:
-        st.session_state.lat = coords["latitude"]
-        st.session_state.lng = coords["longitude"]
+# Get query parameters using updated API
+lat = st.query_params.get("lat", None)
+lng = st.query_params.get("lng", None)
 
+# Store lat/lng in session state if available
+if lat and lng:
+    try:
+        st.session_state.lat = float(lat)
+        st.session_state.lng = float(lng)
+    except ValueError:
+        pass
+
+# Trigger JS to update query params
 if get_location_button:
     components.html(
         f"""
@@ -97,13 +101,7 @@ if get_location_button:
         height=0,
     )
 
-lat = st.experimental_get_query_params().get("lat", [None])[0]
-lng = st.experimental_get_query_params().get("lng", [None])[0]
-
-if lat and lng:
-    st.session_state.lat = float(lat)
-    st.session_state.lng = float(lng)
-
+# Display location and handle attendance marking
 if st.session_state.lat and st.session_state.lng:
     st.success(f"📌 Location: Lat: {st.session_state.lat:.5f}, Lng: {st.session_state.lng:.5f}")
     distance = haversine(st.session_state.lat, st.session_state.lng, COLLEGE_LAT, COLLEGE_LNG)
@@ -120,4 +118,3 @@ if st.session_state.lat and st.session_state.lng:
         st.error("❌ You are outside the allowed 1 km radius of the college.")
 else:
     st.info("Your location has not been captured yet.")
-
